@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f8f5">
+    <meta name="description" content="Theo dõi thu nhập, chi tiêu và số dư cá nhân trong một giao diện tiếng Việt dễ sử dụng.">
+    <title>Chi tiêu cá nhân</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-frame">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Chi tiêu cá nhân, trang chủ">
+          <span class="brand-mark" aria-hidden="true">₫</span>
+          <span><strong>Chi tiêu</strong><small>cá nhân</small></span>
+        </a>
+        <div id="account-actions" class="account-actions hidden">
+          <span id="user-email" class="user-email"></span>
+          <button id="logout-button" class="button button-quiet" type="button">Đăng xuất</button>
+        </div>
+      </header>
+
+      <main>
+        <section id="auth-view" class="auth-layout" aria-labelledby="auth-title">
+          <div class="welcome-panel">
+            <p class="eyebrow">Tài chính rõ ràng, mỗi ngày</p>
+            <h1 id="auth-title">Biết tiền của bạn đang đi đâu.</h1>
+            <p class="welcome-copy">Ghi lại thu nhập và chi tiêu, xem tổng quan theo tháng và giữ dữ liệu riêng trong tài khoản của bạn.</p>
+            <div class="welcome-note"><span aria-hidden="true">✳</span> Bắt đầu với một bức tranh tài chính dễ hiểu.</div>
+          </div>
+          <div class="auth-card">
+            <div class="auth-tabs" role="tablist" aria-label="Tài khoản">
+              <button class="auth-tab active" type="button" role="tab" aria-selected="true" data-auth-mode="login">Đăng nhập</button>
+              <button class="auth-tab" type="button" role="tab" aria-selected="false" data-auth-mode="register">Tạo tài khoản</button>
+            </div>
+            <h2 id="auth-heading">Chào mừng bạn trở lại</h2>
+            <p id="auth-description" class="muted">Đăng nhập để xem sổ thu chi của bạn.</p>
+            <form id="auth-form" class="stack-form">
+              <label>Email
+                <input id="auth-email" name="email" type="email" autocomplete="email" maxlength="254" required>
+              </label>
+              <label>Mật khẩu
+                <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="10" required>
+              </label>
+              <p id="password-help" class="field-hint hidden">Mật khẩu cần có ít nhất 10 ký tự.</p>
+              <button id="auth-submit" class="button button-primary button-wide" type="submit">Đăng nhập</button>
+            </form>
+            <p id="auth-message" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section id="dashboard-view" class="dashboard hidden" aria-labelledby="dashboard-title">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">Tổng quan tài chính</p>
+              <h1 id="dashboard-title">Chào bạn, đây là tháng của bạn.</h1>
+              <p class="muted">Theo dõi dòng tiền và cập nhật sổ thu chi bất cứ lúc nào.</p>
+            </div>
+            <label class="month-picker">Tháng
+              <input id="month-filter" type="month" aria-label="Chọn tháng xem báo cáo">
+            </label>
+          </div>
+
+          <div class="summary-grid" aria-label="Tóm tắt thu chi">
+            <article class="summary-card income-card"><span class="summary-label">Tổng thu</span><strong id="total-income">—</strong><span class="summary-foot">Trong tháng đã chọn</span></article>
+            <article class="summary-card expense-card"><span class="summary-label">Tổng chi</span><strong id="total-expense">—</strong><span class="summary-foot">Trong tháng đã chọn</span></article>
+            <article class="summary-card balance-card"><span class="summary-label">Số dư</span><strong id="total-balance">—</strong><span class="summary-foot">Tổng thu trừ tổng chi</span></article>
+          </div>
+
+          <div class="insights-grid">
+            <section class="panel chart-panel" aria-labelledby="daily-chart-title">
+              <div class="panel-heading"><div><h2 id="daily-chart-title">Dòng tiền trong tháng</h2><p class="muted">So sánh thu nhập và chi tiêu theo ngày.</p></div><span class="legend"><i class="legend-income"></i> Thu <i class="legend-expense"></i> Chi</span></div>
+              <div class="canvas-wrap"><canvas id="daily-chart" aria-label="Biểu đồ cột tổng thu và chi theo ngày" role="img"></canvas></div>
+              <p id="daily-chart-empty" class="chart-empty hidden">Chưa có giao dịch trong tháng này.</p>
+            </section>
+            <section class="panel chart-panel" aria-labelledby="category-chart-title">
+              <div class="panel-heading"><div><h2 id="category-chart-title">Chi theo danh mục</h2><p class="muted">Những nhóm chi tiêu lớn nhất.</p></div></div>
+              <div class="canvas-wrap category-canvas-wrap"><canvas id="category-chart" aria-label="Biểu đồ chi tiêu theo danh mục" role="img"></canvas></div>
+              <p id="category-chart-empty" class="chart-empty hidden">Tháng này chưa có khoản chi.</p>
+            </section>
+          </div>
+
+          <div class="workspace-grid">
+            <section class="panel transaction-panel" aria-labelledby="transactions-title">
+              <div class="panel-heading transaction-heading">
+                <div><h2 id="transactions-title">Giao dịch</h2><p class="muted">Tối đa 500 giao dịch gần nhất trong tháng.</p></div>
+                <div class="list-filters">
+                  <label class="sr-only" for="type-filter">Lọc theo loại</label>
+                  <select id="type-filter"><option value="">Tất cả loại</option><option value="income">Thu nhập</option><option value="expense">Chi tiêu</option></select>
+                  <label class="sr-only" for="category-filter">Lọc theo danh mục</label>
+                  <select id="category-filter"><option value="">Tất cả danh mục</option></select>
+                </div>
+              </div>
+              <div id="transaction-list" class="transaction-list"></div>
+              <p id="transaction-empty" class="empty-state hidden">Chưa có giao dịch phù hợp. Hãy thêm giao dịch đầu tiên.</p>
+            </section>
+
+            <aside class="side-column">
+              <section class="panel form-panel" aria-labelledby="transaction-form-title">
+                <div class="panel-heading"><div><h2 id="transaction-form-title">Thêm giao dịch</h2><p class="muted">Ghi lại khoản thu hoặc chi.</p></div></div>
+                <form id="transaction-form" class="stack-form compact-form">
+                  <label>Loại giao dịch
+                    <select id="transaction-type" required><option value="expense">Chi tiêu</option><option value="income">Thu nhập</option></select>
+                  </label>
+                  <label>Số tiền (₫)
+                    <input id="transaction-amount" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+                  </label>
+                  <label>Danh mục
+                    <select id="transaction-category" required></select>
+                  </label>
+                  <label>Ngày
+                    <input id="transaction-date" type="date" required>
+                  </label>
+                  <label>Ghi chú <span class="optional">(không bắt buộc)</span>
+                    <input id="transaction-description" type="text" maxlength="250" placeholder="Ví dụ: Tiền ăn trưa">
+                  </label>
+                  <div class="form-actions">
+                    <button id="transaction-submit" class="button button-primary button-wide" type="submit">Lưu giao dịch</button>
+                    <button id="transaction-cancel" class="button button-quiet button-wide hidden" type="button">Hủy chỉnh sửa</button>
+                  </div>
+                </form>
+              </section>
+
+              <section class="panel categories-panel" aria-labelledby="categories-title">
+                <div class="panel-heading"><div><h2 id="categories-title">Danh mục của tôi</h2><p class="muted">Tổ chức các khoản thu chi.</p></div></div>
+                <form id="category-form" class="category-form">
+                  <label class="sr-only" for="category-name">Tên danh mục</label>
+                  <input id="category-name" type="text" maxlength="40" placeholder="Tên danh mục mới" required>
+                  <label class="sr-only" for="category-type">Loại danh mục</label>
+                  <select id="category-type"><option value="expense">Chi tiêu</option><option value="income">Thu nhập</option></select>
+                  <button id="category-submit" class="button button-secondary" type="submit">Thêm</button>
+                  <button id="category-cancel" class="button button-quiet hidden" type="button">Hủy</button>
+                </form>
+                <div id="category-list" class="category-list"></div>
+              </section>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
+      <footer class="footer"><span>Dữ liệu thu chi chỉ hiển thị trong tài khoản của bạn.</span><span>Quản lý chi tiêu cá nhân</span></footer>
+    </div>
+  </body>
+</html>
