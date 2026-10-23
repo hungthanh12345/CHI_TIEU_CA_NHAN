@@ -13,6 +13,7 @@
     "lint": "node --check src/server.js && node --check src/validation.js && node --check public/app.js && node --check test/app.test.js"
   },
   "dependencies": {
+    "@prometheus-io/client": "0.16.0",
     "bcryptjs": "3.0.2",
     "connect-pg-simple": "10.0.0",
     "express": "5.1.0",

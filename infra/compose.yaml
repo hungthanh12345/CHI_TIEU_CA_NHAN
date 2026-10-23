@@ -38,6 +38,52 @@ services:
     networks:
     - data
     - edge
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: db:5432/${DB_NAME}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_EXPORTER_USER:?Set POSTGRES_EXPORTER_USER in .env}
+      DATA_SOURCE_PASS: ${POSTGRES_EXPORTER_PASSWORD:?Set POSTGRES_EXPORTER_PASSWORD
+        in .env}
+    depends_on:
+      postgres-exporter-init:
+        condition: service_completed_successfully
+    networks:
+    - data
+    - metrics
+  postgres-exporter-init:
+    image: postgres:17.11-alpine
+    restart: 'no'
+    environment:
+      DB_NAME: ${DB_NAME:?Set DB_NAME in .env}
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_EXPORTER_USER: ${POSTGRES_EXPORTER_USER:?Set POSTGRES_EXPORTER_USER
+        in .env}
+      POSTGRES_EXPORTER_PASSWORD: ${POSTGRES_EXPORTER_PASSWORD:?Set POSTGRES_EXPORTER_PASSWORD
+        in .env}
+    entrypoint:
+    - /bin/sh
+    - -ec
+    command:
+    - "if [ \"$$POSTGRES_EXPORTER_USER\" = \"$$DB_USER\" ]; then\n  echo \"POSTGRES_EXPORTER_USER\
+      \ must be a separate role from DB_USER\" >&2\n  exit 1\nfi\npsql -h db -U \"\
+      $$DB_USER\" -d \"$$DB_NAME\" -v ON_ERROR_STOP=1 <<'SQL'\n\\getenv exporter_user\
+      \ POSTGRES_EXPORTER_USER\n\\getenv exporter_password POSTGRES_EXPORTER_PASSWORD\n\
+      \\getenv database_name DB_NAME\nSELECT format('CREATE ROLE %I LOGIN PASSWORD\
+      \ %L', :'exporter_user', :'exporter_password')\nWHERE NOT EXISTS (SELECT 1 FROM\
+      \ pg_catalog.pg_roles WHERE rolname = :'exporter_user')\n\\gexec\nSELECT format('ALTER\
+      \ ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION\
+      \ NOBYPASSRLS INHERIT', :'exporter_user', :'exporter_password')\n\\gexec\nSELECT\
+      \ format('GRANT CONNECT ON DATABASE %I TO %I', :'database_name', :'exporter_user')\n\
+      \\gexec\nSELECT format('GRANT pg_monitor TO %I', :'exporter_user')\n\\gexec\n\
+      SQL\n"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+    - data
   app:
     build:
       context: ..
@@ -59,6 +105,7 @@ services:
     networks:
     - proxy
     - data
+    - metrics
     healthcheck:
       test:
       - CMD
@@ -108,6 +155,79 @@ services:
       timeout: 5s
       retries: 4
       start_period: 10s
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    restart: unless-stopped
+    command:
+    - --nginx.scrape-uri=http://nginx:8081/stub_status
+    depends_on:
+      nginx:
+        condition: service_healthy
+    networks:
+    - proxy
+    - metrics
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    restart: unless-stopped
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=15d
+    volumes:
+    - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus_data:/prometheus
+    depends_on:
+      app:
+        condition: service_healthy
+      nginx-exporter:
+        condition: service_started
+      postgres-exporter:
+        condition: service_started
+      cadvisor:
+        condition: service_started
+    networks:
+    - metrics
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    restart: unless-stopped
+    privileged: true
+    volumes:
+    - /:/rootfs:ro
+    - /var/run:/var/run:ro
+    - /sys:/sys:ro
+    - /var/lib/docker:/var/lib/docker:ro
+    - /dev/disk:/dev/disk:ro
+    networks:
+    - metrics
+  grafana:
+    image: grafana/grafana:13.2.2
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD
+        in .env}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_SECURITY_ALLOW_EMBEDDING: 'false'
+      GF_SERVER_ROOT_URL: http://localhost:3001/
+    ports:
+    - 127.0.0.1:3001:3000
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+    - prometheus
+    networks:
+    - metrics
+    - edge
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q -O /dev/null http://127.0.0.1:3000/api/health
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 networks:
   edge:
     driver: bridge
@@ -115,7 +235,11 @@ networks:
     driver: bridge
   data:
     driver: bridge
+  metrics:
+    driver: bridge
 volumes:
   postgres_data: null
   pgadmin_data: null
   nginx_certs: null
+  prometheus_data: null
+  grafana_data: null

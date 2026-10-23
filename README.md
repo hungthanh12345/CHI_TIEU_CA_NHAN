@@ -36,3 +36,9 @@ npm test
 ```
 
 Các test HTTP của ứng dụng sử dụng PostgreSQL pool giả, không thay thế kiểm thử tích hợp với PostgreSQL thật. Không commit `.env`, mật khẩu, chứng chỉ riêng hoặc backup dữ liệu.
+
+## Monitoring bằng Prometheus và Grafana
+
+Prometheus scrape ứng dụng tại `/metrics`, Nginx Exporter, PostgreSQL Exporter và cAdvisor theo chu kỳ 15 giây. PostgreSQL Exporter dùng role `chi_tieu_metrics` riêng; PostgreSQL vẫn không publish cổng ra host. Grafana được provision với datasource Prometheus và dashboard có request rate, độ trễ HTTP p95, scrape targets, CPU/RAM/network container cùng một số chỉ số PostgreSQL.
+
+Sau khi chạy Compose, kiểm tra service bằng `docker compose --env-file .env -f infra/compose.yaml ps`; mở Grafana ở `http://localhost:3001` và đăng nhập bằng biến Grafana trong `.env`. Các panel hiển thị chuỗi metrics theo khoảng thời gian đã chọn; chúng không thay thế kiểm thử nghiệp vụ.

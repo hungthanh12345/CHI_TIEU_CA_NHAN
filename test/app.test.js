@@ -211,4 +211,7 @@ test("HTTP flow requires CSRF, creates a session, scopes CRUD queries to the sig
   response = await fetch(`${base}/api/auth/session`);
   assert.equal((await response.json()).authenticated, false);
 
+  response = await fetch(`${base}/metrics`);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /expense_http_requests_total/);
 });

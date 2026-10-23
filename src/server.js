@@ -7,6 +7,7 @@ const connectPgSimple = require("connect-pg-simple");
 const bcrypt = require("bcryptjs");
 const helmet = require("helmet");
 const { rateLimit } = require("express-rate-limit");
+const client = require("@prometheus-io/client");
 const { Pool } = require("pg");
 const {
   ValidationError, parseRegister, parseLogin, parseCategory, parseName,
@@ -107,8 +108,23 @@ function createApp({ pool, sessionStore } = {}) {
     next();
   });
 
+  const registry = new client.Registry();
+  client.collectDefaultMetrics({ register: registry, prefix: "expense_" });
+  const requestCounter = new client.Counter({
+    name: "expense_http_requests_total", help: "Số yêu cầu HTTP", labelNames: ["method", "route", "status"], registers: [registry]
+  });
+  const requestDuration = new client.Histogram({
+    name: "expense_http_request_duration_seconds", help: "Thời gian xử lý yêu cầu HTTP", labelNames: ["method", "route", "status"],
+    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5], registers: [registry]
+  });
   app.use((req, res, next) => {
+    const started = process.hrtime.bigint();
     res.on("finish", () => {
+      if (req.path === "/metrics") return;
+      const route = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+      const labels = { method: req.method, route, status: String(res.statusCode) };
+      requestCounter.inc(labels);
+      requestDuration.observe(labels, Number(process.hrtime.bigint() - started) / 1e9);
       console.log(JSON.stringify({ level: "info", method: req.method, path: req.path, status: res.statusCode }));
     });
     next();
@@ -118,6 +134,10 @@ function createApp({ pool, sessionStore } = {}) {
   app.get("/health/ready", asyncRoute(async (req, res) => {
     await pool.query("SELECT 1");
     res.json({ status: "ready" });
+  }));
+  app.get("/metrics", asyncRoute(async (req, res) => {
+    res.set("Content-Type", registry.contentType);
+    res.end(await registry.metrics());
   }));
   app.use(express.static(path.join(__dirname, "..", "public"), { index: "index.html", maxAge: "1h", etag: true }));
 

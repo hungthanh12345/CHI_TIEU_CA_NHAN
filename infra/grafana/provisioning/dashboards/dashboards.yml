@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Chi tiêu cá nhân
+    orgId: 1
+    folder: Chi tiêu cá nhân
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards
