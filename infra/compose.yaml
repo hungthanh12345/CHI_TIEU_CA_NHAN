@@ -199,6 +199,65 @@ services:
     - /dev/disk:/dev/disk:ro
     networks:
     - metrics
+  loki:
+    image: grafana/loki:3.6.11
+    restart: unless-stopped
+    command:
+    - -config.file=/etc/loki/loki.yaml
+    volumes:
+    - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
+    - loki_data:/loki
+    networks:
+    - logs
+  promtail:
+    image: grafana/promtail:3.6.11
+    restart: unless-stopped
+    user: 0:0
+    command:
+    - -config.file=/etc/promtail/promtail.yaml
+    - -config.expand-env=true
+    environment:
+      PROMTAIL_COMPOSE_PROJECT: ${PROMTAIL_COMPOSE_PROJECT:-chi-tieu-ca-nhan}
+    volumes:
+    - ./promtail/promtail.yaml:/etc/promtail/promtail.yaml:ro
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - promtail_positions:/var/lib/promtail
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+    - logs
+    healthcheck:
+      test:
+      - CMD
+      - bash
+      - -ec
+      - exec 3<>/dev/tcp/127.0.0.1/9080; printf "GET /ready HTTP/1.0\r\n\r\n" >&3;
+        IFS= read -r status <&3; [[ $$status == *"200 OK"* ]]
+      interval: 20s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+  alloy:
+    profiles:
+    - legacy-alloy
+    image: grafana/alloy:v1.19.2
+    restart: unless-stopped
+    user: 0:0
+    command:
+    - run
+    - --server.http.listen-addr=0.0.0.0:12345
+    - --storage.path=/var/lib/alloy/data
+    - /etc/alloy/config.alloy
+    volumes:
+    - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - alloy_data:/var/lib/alloy/data
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+    - logs
   grafana:
     image: grafana/grafana:13.2.2
     restart: unless-stopped
@@ -217,8 +276,10 @@ services:
     - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
     - prometheus
+    - loki
     networks:
     - metrics
+    - logs
     - edge
     healthcheck:
       test:
@@ -237,9 +298,14 @@ networks:
     driver: bridge
   metrics:
     driver: bridge
+  logs:
+    driver: bridge
 volumes:
   postgres_data: null
   pgadmin_data: null
   nginx_certs: null
   prometheus_data: null
+  loki_data: null
+  promtail_positions: null
+  alloy_data: null
   grafana_data: null

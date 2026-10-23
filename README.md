@@ -42,3 +42,17 @@ Các test HTTP của ứng dụng sử dụng PostgreSQL pool giả, không thay
 Prometheus scrape ứng dụng tại `/metrics`, Nginx Exporter, PostgreSQL Exporter và cAdvisor theo chu kỳ 15 giây. PostgreSQL Exporter dùng role `chi_tieu_metrics` riêng; PostgreSQL vẫn không publish cổng ra host. Grafana được provision với datasource Prometheus và dashboard có request rate, độ trễ HTTP p95, scrape targets, CPU/RAM/network container cùng một số chỉ số PostgreSQL.
 
 Sau khi chạy Compose, kiểm tra service bằng `docker compose --env-file .env -f infra/compose.yaml ps`; mở Grafana ở `http://localhost:3001` và đăng nhập bằng biến Grafana trong `.env`. Các panel hiển thị chuỗi metrics theo khoảng thời gian đã chọn; chúng không thay thế kiểm thử nghiệp vụ.
+
+## Logging tập trung bằng Loki và Promtail
+
+Promtail phát hiện log Docker của service `app`, `nginx` và `db` trong Compose project được chọn qua `PROMTAIL_COMPOSE_PROJECT`, rồi gửi log tới Loki. Nhãn dùng để truy vấn gồm `job="docker"`, `compose_service` và `level` cho log JSON của ứng dụng. Grafana có datasource Loki và panel log.
+
+Ví dụ truy vấn trong Grafana Explore (các truy vấn này là biểu thức, không kèm output giả):
+
+```logql
+{job="docker", compose_service="app"}
+{job="docker", compose_service="nginx"}
+{job="docker", compose_service="app", level="error"}
+```
+
+Promtail đọc Docker API socket; mount `:ro` không loại bỏ rủi ro của quyền daemon. Cấu hình này dành cho demo, cần đánh giá lại trước khi dùng production.
